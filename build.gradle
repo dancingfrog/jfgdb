@@ -4,8 +4,8 @@ allprojects  {
 	apply plugin: 'java'
         group = 'org.jfgdb'
         version = fgdbversion
-	targetCompatibility = 1.7
-	sourceCompatibility = 1.7
+	targetCompatibility = 1.8
+	sourceCompatibility = 1.8
 
 }
 
@@ -29,6 +29,13 @@ apply plugin:'distribution'
 
     }
 
+// we have to export/set the environment variable ESRI_FILE_GDB_HOME to the FileGDB API root dir
+//task('setFileGDB_API') {
+//    println rootProject.projectDir.absolutePath + '/lib/FileGDB_API'
+//    environment 'ESRI_FILE_GDB_HOME', rootProject.projectDir.absolutePath + '/lib/FileGDB_API'
+//}
+
 // we must have the binaries compiled for the java wrapper
-tasks.getByPath(':jfgdb:compileJava').dependsOn(tasks.getByPath(":nativewrapper:build"))
+//task(':jfgdb:compileJava', dependsOn: [ 'setFileGDB_API', tasks.getByPath(":nativewrapper:build")])
+task(':jfgdb:compileJava', dependsOn: [ tasks.getByPath(":nativewrapper:build") ])
 

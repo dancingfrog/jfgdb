@@ -1,0 +1,11 @@
+*.bak
+*.iml
+*.log
+*.retry
+.*
+.DS_Store
+lib
+log*
+node_modules
+target
+t
