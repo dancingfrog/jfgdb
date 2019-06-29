@@ -4,8 +4,10 @@
 *.retry
 .*
 .DS_Store
+build
 lib
 log*
 node_modules
+out
 target
 t

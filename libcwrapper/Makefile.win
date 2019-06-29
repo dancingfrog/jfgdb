@@ -1,0 +1,20 @@
+
+CC = /C/MinGW/bin/gcc.exe
+CXX = /C/MinGW/bin/g++.exe
+JAVA_HOME:=/C/Program Files/Java/jdk1.6.0_18
+JAVAC = $(JAVA_HOME)/bin/javac
+
+all: test Environment.class EnvironmentMain.class Environment_LibC.dll
+	"$(JAVA_HOME)/bin/java" -cp ".;jna.jar" EnvironmentMain
+
+Environment_LibC.dll: Environment_LibC.cc
+	$(CXX) -Wl,--kill-at -shared $< -o $@ -DWINDOWS -I"$(JAVA_HOME)/include/" -I"$(JAVA_HOME)/include/win32" -lmsvcrt
+
+test: test.o
+	$(CC) -o $@ $^
+
+%.class : %.java
+	"$(JAVAC)"  -cp ".;jna.jar" -Xlint:unchecked $<
+
+clean:
+	rm -f *.class *.o *.so test *.dll

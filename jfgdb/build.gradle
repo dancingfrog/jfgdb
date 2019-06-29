@@ -1,7 +1,7 @@
 import com.amazonaws.services.s3.transfer.*
 import com.amazonaws.auth.*
-import com.amazonaws.events.*
-import jp.classmethod.aws.gradle.s3.*
+//import com.amazonaws.events.*
+//import jp.classmethod.aws.gradle.s3.*
 
 /*
  Java FileGeodatabase Thin driver
@@ -45,7 +45,7 @@ compileJava {
 	options.fork = true
 	options.forkOptions.executable = 'javac'
 	options.compilerArgs << '-XDignore.symbol.file'
-	sourceCompatibility = 1.7
+	sourceCompatibility = 1.8
 }
 
 repositories {
@@ -62,29 +62,27 @@ publishing {
 	}
 	repositories {
 		maven {
-				url "s3://jfgdb/maven2"
-				
-				
-				def f = new File(System.getProperty("user.home"), ".aws")
-				def credentialfile = new File(f, "credentials")
-				if (credentialfile.exists()) {
-					org.ini4j.Ini ini = new org.ini4j.Ini(credentialfile);
-					java.util.prefs.Preferences prefs = new org.ini4j.IniPreferences(ini);
-					def id = prefs.node("default").get("aws_access_key_id", null)
-					def sk = prefs.node("default").get("aws_secret_access_key", null)
-					
-					if (id != null && sk != null) {
-						System.out.println("access key read")
-						credentials(AwsCredentials) {
-							accessKey id
-							secretKey sk
-						}
-					} else 
-					{
-						System.out.println("no access keys read")
+			url "http://jfgdb.s3-website-eu-west-1.amazonaws.com/maven2"
+
+			def f = new File(System.getProperty("user.home"), ".aws")
+			def credentialfile = new File(f, "credentials")
+			if (credentialfile.exists()) {
+				org.ini4j.Ini ini = new org.ini4j.Ini(credentialfile);
+				java.util.prefs.Preferences prefs = new org.ini4j.IniPreferences(ini);
+				def id = prefs.node("default").get("aws_access_key_id", null)
+				def sk = prefs.node("default").get("aws_secret_access_key", null)
+
+				if (id != null && sk != null) {
+					System.out.println("access key read")
+					credentials(AwsCredentials) {
+						accessKey id
+						secretKey sk
 					}
+				} else {
+					System.out.println("no access keys read")
 				}
-				
+			}
+
 		}
 	}
 }
@@ -115,13 +113,14 @@ if (!outputlibsdir.exists())
 
 if (System.getenv("ESRI_FILE_GDB_HOME") != null) {
 
-task copySharedLibsInResources << {
+task ("copySharedLibsInResources") {
 	
    copy { 
        into(outputlibsdir)
-       from( "../nativewrapper/build/binaries/fGDBJNIWrapperSharedLibrary") 
-           include("FGDB*.dll")
-           include("*.so")
+       from( "../nativewrapper/build/binaries/fGDBJNIWrapperSharedLibrary")
+       include("FGDB*.dll")
+       include("*.dylib")
+       include("*.so")
    }
    assert  System.getenv("ESRI_FILE_GDB_HOME") != null 
    assert  new File(System.getenv("ESRI_FILE_GDB_HOME")).exists()
@@ -129,34 +128,32 @@ task copySharedLibsInResources << {
    copy {
        into(outputlibsdir)     
        from( new File(System.getenv("ESRI_FILE_GDB_HOME") , "bin64")) 
-           include("FileGDBAPI.dll")
-           exclude("*.pdb")
-           exclude("*D.dll")
-       
+       include("FileGDBAPI.dll")
+       include("*.dylib")
+       exclude("*.pdb")
+       exclude("*D.dll")
    }
 
    copy {
-   into(outputlibsdir)     
-   from( System.getenv("ESRI_FILE_GDB_HOME") + "/lib") 
-       include("*.so")
-   
+       into(outputlibsdir)     
+       from( System.getenv("ESRI_FILE_GDB_HOME") + "/lib") 
+           include("*.so")
    }
 
    copy {
-    into(rootMainResources)     
-    from ("src/main/resources")  
-        include("**/*/files")
-    
+       into(rootMainResources)
+       from ("src/main/resources")
+       include("**/*/files")
    }
 
     /*
         we can't do it automatically, must be manual to solve
         dll loading dependencies
 
-   doLast {
-        String l = (outputlibsdir.listFiles().collect { it.name }).join(",")
-        new File(outputlibsdir, "files").newWriter().write(l) 
-   }
+       doLast {
+            String l = (outputlibsdir.listFiles().collect { it.name }).join(",")
+            new File(outputlibsdir, "files").newWriter().write(l) 
+       }
    */
 
 }
@@ -165,7 +162,7 @@ task copySharedLibsInResources << {
 
 
 if (System.getProperty("java.class.version") >= "52") {
-	
+
 	// sync only available on java 8
     task syncBinariesObjects(type: jp.classmethod.aws.gradle.s3.SyncTask) {
       bucketName 'jfgdb'
@@ -174,39 +171,54 @@ if (System.getProperty("java.class.version") >= "52") {
     }
 
     if (System.getenv("ESRI_FILE_GDB_HOME") != null) {
-    syncBinariesObjects.dependsOn copySharedLibsInResources
+        syncBinariesObjects.dependsOn copySharedLibsInResources
 	}
-   
+
 }
 
 
-task transfertPreparedBinaries() << {
-	
-				 DefaultAWSCredentialsProviderChain credentialProviderChain = new DefaultAWSCredentialsProviderChain();
-				 TransferManager tx = new TransferManager(
-							   credentialProviderChain.getCredentials());
+task ("transferPreparedBinaries") {
 
-	
-				def r = tx.downloadDirectory("jfgdb","sharedlibraries/${project.version}/", rootMainResources)
-				print("downloading .");
-				r.addProgressListener( [
-					"progressChanged" : { e->
-						print(".");
-					}
-				] as com.amazonaws.event.ProgressListener);
-				
-				r.waitForCompletion()
-				println ""
-				tx.shutdownNow()
-	
-		}
-	
-		processResources.dependsOn transfertPreparedBinaries
-	
-	
+    if (System.getenv("ESRI_FILE_GDB_HOME") != null) {
+        def fgdbBinPath = new File("sharedlibraries/${project.version}", rootMainResources)
+        println(new File(fgdbBinPath,  "lib"))
+        
+        mkdir fgdbBinPath.toPath()
+
+        copy {
+            into(new File(fgdbBinPath,  "lib"))
+            from(new File(System.getenv("ESRI_FILE_GDB_HOME") + "/lib"))
+            include("FileGDBAPI.dll")
+            include("*.dylib")
+            exclude("*.pdb")
+            exclude("*D.dll")
+        }
+        
+    } else {
+        DefaultAWSCredentialsProviderChain credentialProviderChain = new DefaultAWSCredentialsProviderChain()
+        TransferManager tx = new TransferManager(
+            credentialProviderChain.getCredentials())
 
 
-task createVersionPropertyFile << {
+        def r = tx.downloadDirectory("jfgdb", "sharedlibraries/${project.version}/", rootMainResources)
+        print("downloading .");
+        r.addProgressListener([
+            "progressChanged": { e ->
+                print(".")
+            }
+        ] as com.amazonaws.event.ProgressListener)
+
+        r.waitForCompletion()
+        println ""
+        tx.shutdownNow()
+    }
+
+}
+	
+processResources.dependsOn transferPreparedBinaries
+	
+
+task("createVersionPropertyFile") {
     def versionProp = new java.util.Properties()
     versionProp.setProperty("version", project.version)
     def resourcemain = new File(project.buildDir, "resources/main")
@@ -216,7 +228,6 @@ task createVersionPropertyFile << {
 
 if (System.getenv("ESRI_FILE_GDB_HOME") != null) {
 	compileJava.dependsOn copySharedLibsInResources
-
 }
 
 compileJava.dependsOn createVersionPropertyFile

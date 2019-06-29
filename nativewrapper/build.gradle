@@ -1,12 +1,11 @@
+/*
 
+    native wrapper library	
+*/
 
-
-    /*
-
-        native wrapper library	
-
-
-    */
+//plugins {
+//    id 'cpp-application'
+//}
 
     apply plugin: 'cpp'
     apply plugin: 'distribution'
@@ -34,8 +33,13 @@ def JAVA_HOME;
         main {
              baseName = "FGDBLibraries"
              contents {
-                        from { 'build/binaries/fGDBJNIWrapperSharedLibrary' }
+                    from ('build/libs/fGDBJNIWrapper/shared') {
+                        include('*.a')
+                        include('*.dylib')
+                        include('*.dll')
+                        include('*.so')
                     }
+                }
         }
 
     }
@@ -94,6 +98,7 @@ def JAVA_HOME;
 
                               cppCompiler.args "-I" + new File(ESRI_FILE_GDB_HOME, "include").getAbsolutePath(),
                                                             "-I" + new File(JAVA_HOME, "include").getAbsolutePath(),
+                                                            "-I" + new File(JAVA_HOME, "include/darwin").getAbsolutePath(),
                                                             "-I" + new File(JAVA_HOME, "include/linux").getAbsolutePath()
 
                         

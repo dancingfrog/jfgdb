@@ -1,12 +1,14 @@
 package org.fgdbapi.thindriver;
 
+import com.sun.jna.Native;
 import com.sun.jna.NativeLibrary;
 import com.sun.jna.Platform;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
+
+import java.io.*;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Collections;
+import java.util.Map;
 import java.util.Properties;
 
 /**
@@ -59,16 +61,17 @@ public class SharedLibrariesInitializer {
 
   private static void uncompressFile(String resourcePath, String filename, File outputDir)
       throws Exception {
-    assert resourcePath != null;
-    assert !resourcePath.endsWith("/");
+//    assert resourcePath != null;
+//    assert !resourcePath.endsWith("/");
 
     if (filename == null) return;
 
     String basePath = resourcePath.substring(0, resourcePath.lastIndexOf("/"));
-    assert !basePath.endsWith("/");
+//    assert !basePath.endsWith("/");
 
     String libraryResourcePath = basePath + "/" + filename;
-    InputStream is = SharedLibrariesInitializer.class.getResourceAsStream(libraryResourcePath);
+    //InputStream is = SharedLibrariesInitializer.class.getResourceAsStream(libraryResourcePath);
+    InputStream is = new FileInputStream(libraryResourcePath);
     if (is == null) throw new Exception("resource \"" + libraryResourcePath + "\" not found");
 
     try {
@@ -122,6 +125,7 @@ public class SharedLibrariesInitializer {
             "fgdbversion.properties file not found in the build,  incorrect compile");
 
       String version = null;
+      String wrapperLibraryPath = null;
       Properties properties = new Properties();
       try {
         // load the fgdb properties
@@ -139,26 +143,18 @@ public class SharedLibrariesInitializer {
       }
 
       // in jar, the dll are in this package
-      String resourcesFilesPath = "/sharedlibraries/" + version + "/" + osArch + "/files";
-      // get the stream to write files
-      InputStream resourceAsStream =
-          SharedLibrariesInitializer.class.getResourceAsStream(resourcesFilesPath);
-      if (resourceAsStream == null)
-        throw new RuntimeException("architecture is not supported yet : " + resourcesFilesPath);
+      String resourcesFilesPath =       (System.getenv("ESRI_FILE_GDB_HOME") != null) ?
+          //new File(System.getenv("ESRI_FILE_GDB_HOME")).toPath().toAbsolutePath().toString() :
+          new File(System.getenv("ESRI_FILE_GDB_HOME") + "/lib").toPath().toString() :
+          new File("/sharedlibraries/" + version + "/" + osArch + "/files").toPath().toString();
+
       try {
-        InputStreamReader inputStreamReader = new InputStreamReader(resourceAsStream, "UTF-8");
-        StringBuilder sb = new StringBuilder();
-        int b;
-        while ((b = inputStreamReader.read()) != -1) {
-          sb.append((char) b);
-        }
+        File[] files = Paths.get(resourcesFilesPath).toFile().listFiles();
         File outputDir = new File(tmpFile, "fgdbsharedlibs/" + version);
         outputDir.mkdirs();
-        String[] files = sb.toString().split(",");
 
-        String wrapperLibraryPath = null;
-
-        for (String filename : files) {
+        for (File file : files) {
+          String filename = file.getName();
 
           filename = sanitizeFileName(filename);
           if (filename == null || filename.isEmpty()) continue;
@@ -174,66 +170,55 @@ public class SharedLibrariesInitializer {
 
           System.setProperty("jna.library.path", libPath);
 
-          uncompressFile(resourcesFilesPath, filename, outputDir);
+          uncompressFile(resourcesFilesPath + "/", filename, outputDir);
 
           if (filename.toLowerCase().contains("wrapper")) {
-            String loadingDll = new File(outputDir, filename).getAbsolutePath();
-            wrapperLibraryPath = loadingDll;
+            if (wrapperLibraryPath == null)
+              wrapperLibraryPath = new File(outputDir, filename).getAbsolutePath();
           }
 
-          if (filename.endsWith(".dll") || filename.endsWith(".so")) { // sanity
+          if (filename.endsWith(".dll") || filename.endsWith(".so") || filename.endsWith(".dylib")) { // sanity
 
-            String loadingDll = new File(outputDir, filename).getAbsolutePath();
-            System.out.println("loading sharedlibrary :" + loadingDll);
+            System.out.println("loading sharedlibrary :" + wrapperLibraryPath);
 
             if (Platform.isWindows()) {
               // load the library
-              NativeLibrary.getInstance(loadingDll);
+              NativeLibrary.getInstance(wrapperLibraryPath);
+
+            } else {
+              // need to load wrapper for libc
+
+//                if (libc == null) {
+//                    System.out
+//                            .println("setting LD_LIBRARY_PATH to "
+//                                    + outputDir
+//                                            .getAbsolutePath());
+//                    libc = (LibC) Native.loadLibrary("c",
+//                            LibC.class);
+//
+//                    int status = libc.setenv("LD_LIBRARY_PATH",
+//                            outputDir.getAbsolutePath(), 1);
+//
+//                    System.out.println("setenv returned "
+//                            + status);
+//
+//                }
+//
+//                if (libdl == null) {
+//                    libdl = (DL) Native.loadLibrary("c",
+//                            DL.class);
+//                }
+//
+//                int returned = libdl.dlopen(
+//                        outputDir.getAbsolutePath(),
+//                        0x0100 | 0x00002);
+//                System.out.println("dlopen returned " + returned);
+//              System.loadLibrary("FGDBJNIWrapper");
             }
 
-            //						{
-            //
-            //							// System.load(loadingDll); // don't work with
-            //							// dependencies
-            //
-            //							Map options = Collections.EMPTY_MAP;
-            //							if (Platform.isLinux()) {
-            //
-            //								if (libc == null) {
-            //									System.out
-            //											.println("setting LD_LIBRARY_PATH to "
-            //													+ outputDir
-            //															.getAbsolutePath());
-            //									libc = (LibC) Native.loadLibrary("c",
-            //											LibC.class);
-            //
-            //									int status = libc.setenv("LD_LIBRARY_PATH",
-            //											outputDir.getAbsolutePath(), 1);
-            //
-            //									System.out.println("setenv returned "
-            //											+ status);
-            //
-            //								}
-            //
-            //								if (libdl == null) {
-            //									libdl = (DL) Native.loadLibrary("c",
-            //											DL.class);
-            //								}
-            //
-            //								int returned = libdl.dlopen(
-            //										outputDir.getAbsolutePath(),
-            //										0x0100 | 0x00002);
-            //								System.out.println("dlopen returned "
-            //										+ returned);
-            //
-            //								// } else {
-            //
-            //							}
-            //						}
-
-            // if (filename.toLowerCase().contains("wrapper")) {
-            // System.loadLibrary("FGDBJNIWrapper");
-            // }
+//             if (filename.toLowerCase().contains("wrapper")) {
+//              System.loadLibrary("FGDBJNIWrapper");
+//             }
 
             System.out.println("successfully loaded");
           }
